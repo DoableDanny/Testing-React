@@ -2,7 +2,7 @@
 
 Project from following https://www.youtube.com/watch?v=7dTTFW7yACQ&list=PL4cUxeGkcC9gm4_-5UsNmLqMosM-dzuvQ and https://www.youtube.com/watch?v=bvdHVxqjv80
 
-NOTE: don't bother trying to run this repo -- there are package conflicts. Just read through the README and look through the examples: there are some unit tests but mostly integraion tests. We test React components, custom hooks, components using global state (Redux or Zustand), and we mock api calls using Jest for Axios, as well as MSW for mocking api routes independent of if using fetch() or axios().
+How to use this repo: read through the README and look through the examples. There are some unit tests but mostly integraion tests. We test React components, custom hooks, components using global state (Redux or Zustand), and we mock api calls using Jest for Axios, as well as MSW for mocking api routes independent of if using fetch() or axios(). We also look at end-to-end testing with Cypress.
 
 ## Why testing?
 
@@ -14,6 +14,10 @@ Benefits of automated testing:
 - Increase confidence in application
 - Speeds up QA time (less time manual testing)
 - Can serve as documentation
+
+## Arrage, Act, Assert -- Testing Philosophy
+
+The idea is: First you put the application into a specific state, then you take some action in the application that causes it to change, and finally you check the resulting application state.
 
 ## Unit tests
 
@@ -37,7 +41,13 @@ Tests what the user would do in the app from beginning to end; e.g.:
 
 End to end tests very important as they simulate the user flow and they really test all the features in the app.
 
-Not usually done with React Testing Library; usually with Puppeteer or Cyprus. End to end not covered in this course.
+Not usually done with React Testing Library; usually with Puppeteer or Cyprus.
+
+## Testing priority
+
+A sensible testing strategy. Prioritise high-value features:
+
+![](images/testing-priority.png)
 
 ## Creating tests
 
@@ -294,6 +304,78 @@ See /customHooks examples.
 1. Create store: see /src/app/zustandStore.js
 2. Create component using that store: ZustandCounter.js
 3. Create tests: ZustandCounter.test.js
+
+## End-to-end testing with Cypress
+
+1. Intall: `yarn add -D cypress @testing-library/cypress`
+2. Run Cypress: `yarn run cypress open`. This opens up the Cypress desktop software.
+3. In Cypress, select "End to end testing". This will create the Cypress configuration files in your project.
+4. In /cypress/support/commands.js, add `import "@testing-library/cypress/add-commands";`. This isn't necessary, but you can now use some of DOM Testing Library's `findBy`, and `findAllBy` commands off the global `cy` object (making things more consistent with our unit and integration tests using React Testing Library).
+5. In Cypress, select browser (probs Chrome!)
+6. Cypress opens up Chrome. Click create new spec with the default name. This is a template for you to start writing your end to end tests.
+
+## Example end to end test
+
+Create file `/cypress/e2e/payment_spec.cy.js`. Below is an end to end test for a user logging in to a payments app, checking their account $, making a payment to another user, then checking the amount was deducted from their balance -- a very typical way that a user would likely interact with such an app:
+
+```js
+const { v4: uuidv4 } = require("uuid");
+
+describe("payment", () => {
+  it("user can make payment", () => {
+    //  login
+    cy.visit("/");
+    cy.findByRole("textbox", { name: /username/i }).type("johndoe");
+    cy.findByLabelText(/password/i).type("s3cret");
+    cy.findByRole("checkbox", { name: /remember me/i }).check();
+    cy.findByRole("button", { name: /sign in/i }).click();
+
+    // check account balance
+    let oldBalance;
+    cy.get("[data-test=sidenav-user-balance]").then(
+      ($balance) => (oldBalance = $balance.text())
+    );
+
+    // click on new button
+    cy.findByRole("button", { name: /new/i }).click();
+
+    // search for user
+    cy.findByRole("textbox").type("devon becker");
+    cy.findByText(/devon becker/i).click();
+
+    // add amount and note and click pay
+    const paymentAmount = "5.00";
+    cy.findByPlaceholderText(/amount/i).type(paymentAmount);
+    const note = uuidv4();
+    cy.findByPlaceholderText(/add a note/i).type(note);
+    cy.findByRole("button", { name: /pay/i }).click();
+
+    // return to transactions
+    cy.findByRole("button", { name: /return to transactions/i }).click();
+
+    // go to personal payments
+    cy.findByRole("tab", { name: /mine/i }).click();
+
+    // click on payment
+    cy.findByText(note).click({ force: true }); // Cypress failed this test cus the header was obscuring the text -- we could try to scroll this into view, but lets just force it cus we know in the real app on fullscreen that this text is not anywhere near obscured.
+
+    // verify if payment was made
+    cy.findByText(`-$${paymentAmount}`).should("be.visible");
+    cy.findByText(note).should("be.visible");
+
+    // verify if payment amount was deducted
+    cy.get("[data-test=sidenav-user-balance]").then(($balance) => {
+      const convertedOldBalance = parseFloat(oldBalance.replace(/\$|,/g, ""));
+      const convertedNewBalance = parseFloat(
+        $balance.text().replace(/\$|,/g, "")
+      );
+      expect(convertedOldBalance - convertedNewBalance).to.equal(
+        parseFloat(paymentAmount)
+      );
+    });
+  });
+});
+```
 
 # Getting Started with Create React App
 
